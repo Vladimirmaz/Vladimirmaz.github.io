@@ -1,184 +1,267 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:intl/intl.dart'; // Для форматирования даты
 
-void main() {
-  runApp(const TeaHerbsApp());
+// Ваши данные из Supabase
+const supabaseUrl = 'https://mlcjtbnwcajilarcmrhg.supabase.co';
+const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1sY2p0Ym53Y2FqaWxhcmNtcmhnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE1NzI5NTIsImV4cCI6MjA3NzE0ODk1Mn0.vMGIL6XcPA-BWhy3uVnY73PIuVreRlxpjUWQWlKP_ZU';
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Supabase.initialize(
+    url: supabaseUrl,
+    anonKey: supabaseAnonKey,
+  );
+  runApp(MyApp());
 }
 
-class TeaHerbsApp extends StatelessWidget {
-  const TeaHerbsApp({super.key});
-
+class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Поставки трав для чая',
-      debugShowCheckedModeBanner: false,
+      title: 'Supabase Tasks',
       theme: ThemeData(
-        primarySwatch: Colors.green,
-        fontFamily: 'Roboto',
-        appBarTheme: const AppBarTheme(backgroundColor: Color(0xFF2E7D32)),
-        floatingActionButtonTheme: const FloatingActionButtonThemeData(
-          backgroundColor: Color(0xFF1B5E20),
-        ),
+        primarySwatch: Colors.blue,
       ),
-      home: const HerbSupplyPage(),
+      home: SupabaseScreen(),
     );
   }
 }
 
-class HerbSupplyPage extends StatelessWidget {
-  const HerbSupplyPage({super.key});
+class SupabaseScreen extends StatefulWidget {
+  const SupabaseScreen({Key? key}) : super(key: key);
+
+  @override
+  State<SupabaseScreen> createState() => _SupabaseScreenState();
+}
+
+class _SupabaseScreenState extends State<SupabaseScreen> {
+  late final supabase = Supabase.instance.client;
+
+  final TextEditingController _titleController = TextEditingController();
+  final TextEditingController _descriptionController = TextEditingController();
+
+  DateTime? _selectedDueDate; // Хранит выбранную дату и время
+
+  Future<List<Map<String, dynamic>>> fetchData() async {
+    final response = await supabase.from('tasks').select().order('created_at', ascending: false);
+    return response;
+  }
+
+  Future<void> addRecord(String title, String description, DateTime? dueDate) async {
+    try {
+      print("trying to add");
+      final data = {
+        'title': title,
+        'description': description.isEmpty ? null : description,
+        'due_date': dueDate != null ? dueDate.toIso8601String() : null,
+      };
+
+      await supabase.from('tasks').insert(data);
+      if (mounted) setState(() {}); // Обновляем список
+    } catch (error) {
+      debugPrint('Ошибка при добавлении записи: $error');
+    }
+  }
+
+  Future<void> _selectDate(BuildContext context) async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: DateTime.now(),
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2030),
+    );
+
+    if (picked != null) {
+      final TimeOfDay? timePicked = await showTimePicker(
+        context: context,
+        initialTime: TimeOfDay.fromDateTime(DateTime.now()),
+      );
+
+      if (timePicked != null) {
+        final selectedDateTime = DateTime(
+          picked.year,
+          picked.month,
+          picked.day,
+          timePicked.hour,
+          timePicked.minute,
+        );
+        setState(() {
+          _selectedDueDate = selectedDateTime;
+        });
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text(
-          '🌿 Поставки трав для чая',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-        centerTitle: true,
+        title: const Text('Supabase Tasks'),
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Описание
-            const Text(
-              'Мы поставляем свежесобранные, экологически чистые лекарственные травы напрямую с полей Алтая и Кавказа. '
-              'Идеально подходят для производства чая, фитосборов и wellness-продуктов.',
-              style: TextStyle(fontSize: 16, height: 1.5),
-            ),
-            const SizedBox(height: 24),
-
-            // Заголовок раздела
-            const Text(
-              'Наш ассортимент:',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 16),
-
-            // Список трав
-            ...herbs.map((herb) => HerbCard(herb: herb)).toList(),
-
-            const SizedBox(height: 30),
-          ],
-        ),
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          print('Связаться с поставщиком!');
-          // Здесь можно открыть email, WhatsApp или форму
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Контакты отправлены в консоль')),
-          );
-        },
-        child: const Icon(Icons.email),
-      ),
-    );
-  }
-}
-
-// Модель травы
-class Herb {
-  final String name;
-  final String imageUrl;
-  final String description;
-
-  const Herb({
-    required this.name,
-    required this.imageUrl,
-    required this.description,
-  });
-}
-
-// Данные о травах
-final List<Herb> herbs = [
-  Herb(
-    name: 'Ромашка аптечная',
-    imageUrl: 'https://picsum.photos/seed/chamomile/300/200',
-    description: 'Успокаивающее, противовоспалительное действие. Собрана в июне.',
-  ),
-  Herb(
-    name: 'Мята перечная',
-    imageUrl: 'https://picsum.photos/seed/mint/300/200',
-    description: 'Освежает, улучшает пищеварение. Выращена без пестицидов.',
-  ),
-  Herb(
-    name: 'Зверобой',
-    imageUrl: 'https://picsum.photos/seed/stjohns/300/200',
-    description: 'Антидепрессивные свойства. Сушка при низкой температуре.',
-  ),
-  Herb(
-    name: 'Липовый цвет',
-    imageUrl: 'https://picsum.photos/seed/linden/300/200',
-    description: 'При простуде и кашле. Собран в экологически чистых зонах.',
-  ),
-  Herb(
-    name: 'Чабрец (тимьян)',
-    imageUrl: 'https://picsum.photos/seed/thyme/300/200',
-    description: 'Антисептик, ароматный и насыщенный вкус.',
-  ),
-];
-
-// Виджет карточки травы
-class HerbCard extends StatelessWidget {
-  final Herb herb;
-
-  const HerbCard({super.key, required this.herb});
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      margin: const EdgeInsets.only(bottom: 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      body: Column(
         children: [
-          ClipRRect(
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
-            child: Image.network(
-              herb.imageUrl,
-              height: 160,
-              width: double.infinity,
-              fit: BoxFit.cover,
-              loadingBuilder: (context, child, loadingProgress) {
-                if (loadingProgress == null) return child;
-                return const Center(child: CircularProgressIndicator());
-              },
-              errorBuilder: (context, error, stackTrace) {
-                return Container(
-                  height: 160,
-                  color: Colors.grey[300],
-                  child: const Center(child: Icon(Icons.image_not_supported)),
-                );
-              },
+          // Форма для добавления новой записи
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  children: [
+                    TextField(
+                      controller: _titleController,
+                      decoration: const InputDecoration(
+                        labelText: 'Название задачи',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: _descriptionController,
+                      maxLines: 3,
+                      decoration: const InputDecoration(
+                        labelText: 'Описание',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    InkWell(
+                      onTap: () => _selectDate(context),
+                      child: InputDecorator(
+                        decoration: InputDecoration(
+                          labelText: 'Срок выполнения',
+                          border: OutlineInputBorder(),
+                          suffixIcon: const Icon(Icons.calendar_today),
+                        ),
+                        child: Text(
+                          _selectedDueDate == null
+                              ? 'Выберите дату и время'
+                              : DateFormat('yyyy-MM-dd HH:mm').format(_selectedDueDate!),
+                          style: TextStyle(
+                            color: _selectedDueDate == null ? Colors.grey : null,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    ElevatedButton(
+                      onPressed: () {
+                        if (_titleController.text.isNotEmpty) {
+                          addRecord(
+                            _titleController.text,
+                            _descriptionController.text,
+                            _selectedDueDate,
+                          );
+                          _titleController.clear();
+                          _descriptionController.clear();
+                          setState(() {
+                            _selectedDueDate = null;
+                          });
+                        }
+                      },
+                      child: const Text('Добавить задачу'),
+                    ),
+                  ],
+                ),
+              ),
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.all(12.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  herb.name,
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.green,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  herb.description,
-                  style: const TextStyle(fontSize: 14, color: Colors.grey),
-                ),
-              ],
+
+          // FutureBuilder для отображения данных
+          Expanded(
+            child: FutureBuilder<List<Map<String, dynamic>>>(
+              future: fetchData(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+
+                if (snapshot.hasError) {
+                  return Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.error, color: Colors.red, size: 64),
+                        const SizedBox(height: 16),
+                        Text(
+                          'Ошибка загрузки данных',
+                          style: TextStyle(fontSize: 18, color: Colors.red),
+                        ),
+                        Text(
+                          'Детали: ${snapshot.error}',
+                          style: TextStyle(fontSize: 14),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+
+                if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                  return const Center(
+                    child: Text(
+                      'Нет задач для отображения',
+                      style: TextStyle(fontSize: 18),
+                    ),
+                  );
+                }
+
+                List<Map<String, dynamic>> records = snapshot.data!;
+                return ListView.builder(
+                  itemCount: records.length,
+                  itemBuilder: (context, index) {
+                    final record = records[index];
+                    return Card(
+                      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                      child: ListTile(
+                        title: Text(record['title'] ?? 'Без названия'),
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            if (record['description'] != null)
+                              Text(record['description']),
+                            if (record['due_date'] != null)
+                              Text(
+                                'Срок: ${DateFormat('yyyy-MM-dd HH:mm').format(DateTime.parse(record['due_date']))}',
+                                style: const TextStyle(color: Colors.grey),
+                              ),
+                            Text(
+                              'Создано: ${DateFormat('yyyy-MM-dd HH:mm').format(DateTime.parse(record['created_at']))}',
+                              style: const TextStyle(color: Color.fromARGB(255, 134, 76, 76)),
+                            ),
+                            Text(
+                              'ID: ${record['id']}',
+                              style: const TextStyle(color: Color.fromARGB(255, 228, 73, 73)),
+                            ),
+                          ],
+                        ),
+                        trailing: Checkbox(
+                          value: record['is_completed'] == true,
+                          onChanged: (value) async {
+                            try {
+                              await supabase.from('tasks').update({'is_completed': value}).eq('id', record['id']);
+                              if (mounted) setState(() {}); // Обновляем список
+                            } catch (e) {
+                              debugPrint('Ошибка обновления статуса: $e');
+                            }
+                          },
+                        ),
+                      ),
+                    );
+                  },
+                );
+              },
             ),
           ),
         ],
       ),
     );
+  }
+
+  @override
+  void dispose() {
+    _titleController.dispose();
+    _descriptionController.dispose();
+    super.dispose();
   }
 }
